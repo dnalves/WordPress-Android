@@ -17,6 +17,7 @@ import org.wordpress.android.WordPress
 import org.wordpress.android.databinding.ReaderFragmentLayoutBinding
 import org.wordpress.android.models.ReaderTagList
 import org.wordpress.android.ui.ScrollableViewInitializedListener
+import org.wordpress.android.ui.main.WPMainActivity.OnScrollToTopListener
 import org.wordpress.android.ui.reader.ReaderTypes.ReaderPostListType
 import org.wordpress.android.ui.reader.discover.ReaderDiscoverFragment
 import org.wordpress.android.ui.reader.discover.interests.ReaderInterestsFragment
@@ -27,10 +28,11 @@ import org.wordpress.android.ui.reader.viewmodels.ReaderViewModel
 import org.wordpress.android.ui.reader.viewmodels.ReaderViewModel.ReaderUiState.ContentUiState
 import org.wordpress.android.ui.utils.UiHelpers
 import org.wordpress.android.viewmodel.observeEvent
+import java.lang.ref.WeakReference
 import java.util.EnumSet
 import javax.inject.Inject
 
-class ReaderFragment : Fragment(R.layout.reader_fragment_layout), ScrollableViewInitializedListener {
+class ReaderFragment : Fragment(R.layout.reader_fragment_layout), ScrollableViewInitializedListener, OnScrollToTopListener {
     @Inject lateinit var viewModelFactory: ViewModelProvider.Factory
     @Inject lateinit var uiHelpers: UiHelpers
     private lateinit var viewModel: ReaderViewModel
@@ -180,10 +182,14 @@ class ReaderFragment : Fragment(R.layout.reader_fragment_layout), ScrollableView
     }
 
     private class TabsAdapter(parent: Fragment, private val tags: ReaderTagList) : FragmentStateAdapter(parent) {
+
+        // This is only used to have access to the fragments later and to be able to scroll inside of them
+        val fragments: Array<WeakReference<Fragment?>> = Array(tags.size) { WeakReference(null) }
+
         override fun getItemCount(): Int = tags.size
 
         override fun createFragment(position: Int): Fragment {
-            return if (tags[position].isDiscover) {
+            val newFragment = if (tags[position].isDiscover) {
                 ReaderDiscoverFragment()
             } else {
                 ReaderPostListFragment.newInstanceForTag(
@@ -192,7 +198,13 @@ class ReaderFragment : Fragment(R.layout.reader_fragment_layout), ScrollableView
                         true
                 )
             }
+
+            fragments[position] = WeakReference(newFragment)
+
+            return newFragment
         }
+
+
     }
 
     private fun showReaderInterests() {
@@ -220,4 +232,17 @@ class ReaderFragment : Fragment(R.layout.reader_fragment_layout), ScrollableView
     override fun onScrollableViewInitialized(containerId: Int) {
         binding?.appBar?.liftOnScrollTargetViewId = containerId
     }
+
+    override fun onScrollToTop() {
+        if (!isAdded) {
+            return
+        }
+
+        binding?.viewPager?.let { viewPager ->
+            (viewPager.adapter as TabsAdapter?)?.let { adapter ->
+                (adapter.fragments[viewPager.currentItem].get() as? OnScrollToTopListener)?.onScrollToTop()
+            }
+        }
+    }
+
 }
